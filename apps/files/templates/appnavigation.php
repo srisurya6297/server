@@ -1,3 +1,6 @@
+<?php
+script(\OCA\Files\AppInfo\Application::APP_ID, 'dist/files-app-settings');
+?>
 <div id="app-navigation">
 	<ul class="with-icon">
 
@@ -40,6 +43,7 @@
 					   checked="checked" type="checkbox">
 				<label for="showhiddenfilesToggle"><?php p($l->t('Show hidden files')); ?></label>
 			</div>
+			<div id="files-app-settings"></div>
 			<label for="webdavurl"><?php p($l->t('WebDAV')); ?></label>
 			<input id="webdavurl" type="text" readonly="readonly"
 				   value="<?php p($_['webdav_url']); ?>"/>
