@@ -19,7 +19,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
+import axios from '@nextcloud/axios'
+import { emit } from '@nextcloud/event-bus'
 
 import { generateUrl } from './OC/routing'
 import OC from './OC'
@@ -54,6 +55,27 @@ const getInterval = () => {
 	)
 }
 
+const updateToken = async() => {
+	const url = generateUrl('/csrftoken')
+
+	const resp = await axios.get(url)
+
+	return resp.data.token
+}
+
+const poll = async() => {
+	try {
+		const token = await updateToken()
+		setRequestToken(token)
+	} catch (e) {
+		console.error('session heartbeat failed', e)
+	}
+}
+
+const startPolling = () => {
+	return setInterval(poll, getInterval() * 1000)
+}
+
 /**
  * Calls the server periodically to ensure that session and CSRF
  * token doesn't expire
@@ -63,12 +85,34 @@ export const initSessionHeartBeat = () => {
 		console.info('session heartbeat disabled')
 		return
 	}
+	let interval = startPolling()
 
-	setInterval(() => {
-		$.ajax(generateUrl('/csrftoken'))
-			.then(resp => setRequestToken(resp.token))
-			.fail(e => {
-				console.error('session heartbeat failed', e)
+	window.addEventListener('online', async() => {
+		console.info('browser is online again, resuming heartbeat')
+		interval = startPolling()
+		try {
+			await poll()
+			console.info('session token successfully updated after resuming network')
+
+			// Let apps know we're online and requests will have the new token
+			emit('networkOnline', {
+				success: true
 			})
-	}, getInterval() * 1000)
+		} catch (e) {
+			console.error('could not update session token after resuming network', e)
+
+			// Let apps know we're online but requests might have an outdated token
+			emit('networkOnline', {
+				success: false
+			})
+		}
+	})
+	window.addEventListener('offline', () => {
+		console.info('browser is offline, stopping heartbeat')
+
+		// Let apps know we're offline
+		emit('networkOffline', {})
+
+		clearInterval(interval)
+	})
 }
