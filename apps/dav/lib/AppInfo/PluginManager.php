@@ -25,6 +25,7 @@
 namespace OCA\DAV\AppInfo;
 
 use OC\ServerContainer;
+use OCA\DAV\CalDAV\Integration\ICalendarProvider;
 use OCP\App\IAppManager;
 use OCP\AppFramework\QueryException;
 
@@ -57,6 +58,13 @@ class PluginManager {
 	 * @var array
 	 */
 	private $collections = null;
+
+	/**
+	 * Calendar plugins
+	 *
+	 * @var array
+	 */
+	private $calendarPlugins = null;
 
 	/**
 	 * Contstruct a PluginManager
@@ -94,6 +102,18 @@ class PluginManager {
 	}
 
 	/**
+	 * Returns an array of app-registered calendar plugins
+	 *
+	 * @return array
+	 */
+	public function getCalendarPlugins():array {
+		if (null === $this->collections) {
+			$this->populate();
+		}
+		return $this->calendarPlugins;
+	}
+
+	/**
 	 * Retrieve plugin and collection list and populate attributes
 	 */
 	private function populate() {
@@ -107,6 +127,7 @@ class PluginManager {
 			}
 			$this->loadSabrePluginsFromInfoXml($this->extractPluginList($info));
 			$this->loadSabreCollectionsFromInfoXml($this->extractCollectionList($info));
+			$this->loadSabreCalendarPluginsFromInfoXml($this->extractCalendarPluginList($info));
 		}
 	}
 
@@ -130,6 +151,21 @@ class PluginManager {
 			if (isset($array['sabre']['collections']) && is_array($array['sabre']['collections'])) {
 				if (isset($array['sabre']['collections']['collection'])) {
 					$items = $array['sabre']['collections']['collection'];
+					if (!is_array($items)) {
+						$items = [$items];
+					}
+					return $items;
+				}
+			}
+		}
+		return [];
+	}
+
+	private function extractCalendarPluginList(array $array):array {
+		if (isset($array['sabre']) && is_array($array['sabre'])) {
+			if (isset($array['sabre']['calendar-plugins']) && is_array($array['sabre']['calendar-plugins'])) {
+				if (isset($array['sabre']['calendar-plugins']['plugin'])) {
+					$items = $array['sabre']['calendar-plugins']['plugin'];
 					if (!is_array($items)) {
 						$items = [$items];
 					}
@@ -164,6 +200,26 @@ class PluginManager {
 				} else {
 					throw new \Exception("Sabre collection class '$collection' is unknown and could not be loaded");
 				}
+			}
+		}
+	}
+
+	private function loadSabreCalendarPluginsFromInfoXml(array $calendarPlugins):void {
+		foreach ($calendarPlugins as $calendarPlugin) {
+			try {
+				$calendarPlugin = $this->container->query($calendarPlugin);
+			} catch (QueryException $e) {
+				if (class_exists($calendarPlugin)) {
+					$calendarPlugin = new $calendarPlugin();
+				} else {
+					throw new \Exception("Sabre calendar-plugin class '$calendarPlugin' is unknown and could not be loaded");
+				}
+			} finally {
+				if (!($calendarPlugin instanceof ICalendarProvider)) {
+					throw new \Exception("Sabre calendar-plugin class '$calendarPlugin' does not implement ICalendarProvider interface");
+				}
+
+				$this->calendarPlugins[] = $calendarPlugin;
 			}
 		}
 	}
